@@ -10,28 +10,8 @@ import (
 
 // TODO: move this to migration tool that support mongodb.
 func Run(db *mongo.Database) error {
-	// Created governorConfig collection.
-	err := db.CreateCollection(context.TODO(), "governorConfig")
-	if err != nil {
-		target := &mongo.CommandError{}
-		isCommandError := errors.As(err, target)
-		if !isCommandError || err.(mongo.CommandError).Code != 48 {
-			return err
-		}
-	}
-
-	// Created governorStatus collection.
-	err = db.CreateCollection(context.TODO(), "governorStatus")
-	if err != nil {
-		target := &mongo.CommandError{}
-		isCommandError := errors.As(err, target)
-		if !isCommandError || err.(mongo.CommandError).Code != 48 {
-			return err
-		}
-	}
-
 	// Created heartbeats collection.
-	err = db.CreateCollection(context.TODO(), "heartbeats")
+	err := db.CreateCollection(context.TODO(), "heartbeats")
 	if err != nil {
 		target := &mongo.CommandError{}
 		isCommandError := errors.As(err, target)

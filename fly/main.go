@@ -137,11 +137,6 @@ func main() {
 	// Guardian set state managed by processor
 	gst := common.NewGuardianSetState(heartbeatC)
 
-	// Governor cfg
-	govConfigC := make(chan *gossipv1.SignedChainGovernorConfig, 50)
-
-	// Governor status
-	govStatusC := make(chan *gossipv1.SignedChainGovernorStatus, 50)
 	// Bootstrap guardian set, otherwise heartbeats would be skipped
 	// TODO: fetch this and probably figure out how to update it live
 	gs := guardiansets.GetLatest()
@@ -224,36 +219,6 @@ func main() {
 		}
 	}()
 
-	// Log govConfigs
-	go func() {
-		for {
-			select {
-			case <-rootCtx.Done():
-				return
-			case govConfig := <-govConfigC:
-				err := repository.UpsertGovernorConfig(govConfig)
-				if err != nil {
-					logger.Error("Error inserting gov config", zap.Error(err))
-				}
-			}
-		}
-	}()
-
-	// Log govStatus
-	go func() {
-		for {
-			select {
-			case <-rootCtx.Done():
-				return
-			case govStatus := <-govStatusC:
-				err := repository.UpsertGovernorStatus(govStatus)
-				if err != nil {
-					logger.Error("Error inserting gov status", zap.Error(err))
-				}
-			}
-		}
-	}()
-
 	// Load p2p private key
 	var priv crypto.PrivKey
 	priv, err = common.GetOrCreateNodeKey(logger, *nodeKeyPath)
@@ -263,7 +228,7 @@ func main() {
 
 	// Run supervisor.
 	supervisor.New(rootCtx, logger, func(ctx context.Context) error {
-		if err := supervisor.Run(ctx, "p2p", p2p.Run(obsvC, obsvReqC, nil, sendC, signedInC, priv, nil, gst, *p2pPort, *p2pNetworkId, *p2pBootstrap, "", false, rootCtxCancel, nil, govConfigC, govStatusC)); err != nil {
+		if err := supervisor.Run(ctx, "p2p", p2p.Run(obsvC, obsvReqC, nil, sendC, signedInC, priv, nil, gst, *p2pPort, *p2pNetworkId, *p2pBootstrap, "", false, rootCtxCancel, nil, nil, nil)); err != nil {
 			return err
 		}
 
