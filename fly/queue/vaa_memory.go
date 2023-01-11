@@ -34,11 +34,7 @@ func WithSize(v int) VAAInMemoryOption {
 
 // Publish sends the message to a channel.
 func (i *VAAInMemory) Publish(_ context.Context, v *vaa.VAA, data []byte) error {
-	i.ch <- &Message{
-		Data:      data,
-		Ack:       func() {},
-		IsExpired: func() bool { return false },
-	}
+	i.ch <- &Message{Data: data}
 	return nil
 }
 

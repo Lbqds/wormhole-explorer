@@ -5,7 +5,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	fiberLog "github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/wormhole-foundation/wormhole-explorer/fly/internal/sqs"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/storage"
 	"go.uber.org/zap"
 )
@@ -16,12 +15,12 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func NewServer(logger *zap.Logger, repository *storage.Repository, consumer *sqs.Consumer, isLocal bool) *Server {
+func NewServer(logger *zap.Logger, repository *storage.Repository) *Server {
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		logger.Fatal("You must set your 'API_PORT' environmental variable")
 	}
-	ctrl := NewController(repository, consumer, isLocal)
+	ctrl := NewController(repository)
 	app := fiber.New()
 	app.Use(fiberLog.New(fiberLog.Config{
 		Format: "level=info timestamp=${time} method=${method} path=${path} status${status} request_id=${locals:requestid}\n",
