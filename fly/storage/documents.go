@@ -3,7 +3,7 @@ package storage
 import (
 	"time"
 
-	"github.com/wormhole-foundation/wormhole/sdk/vaa"
+	"github.com/alephium/wormhole-fork/node/pkg/vaa"
 )
 
 type IndexingTimestamps struct {

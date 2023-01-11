@@ -2,12 +2,15 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/wormhole-foundation/wormhole-explorer/fly/deduplicator"
+	"github.com/alephium/wormhole-fork/explorer/fly/deduplicator"
 
-	"github.com/certusone/wormhole/node/pkg/common"
-	"github.com/wormhole-foundation/wormhole/sdk/vaa"
+	"github.com/alephium/wormhole-fork/node/pkg/common"
+	"github.com/alephium/wormhole-fork/node/pkg/processor"
+	"github.com/alephium/wormhole-fork/node/pkg/vaa"
+	ethCommon "github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 )
 
@@ -32,9 +35,33 @@ func NewVAAGossipConsumer(
 	}
 }
 
+func verifyVAA(v *vaa.VAA, addresses []ethCommon.Address) error {
+	if addresses == nil {
+		return errors.New("No addresses were provided")
+	}
+
+	// Check if VAA doesn't have any signatures
+	if len(v.Signatures) == 0 {
+		return errors.New("VAA was not signed")
+	}
+
+	// Verify VAA has enough signatures for quorum
+	quorum := processor.CalculateQuorum(len(addresses))
+	if len(v.Signatures) < quorum {
+		return errors.New("VAA did not have a quorum")
+	}
+
+	// Verify VAA signatures to prevent a DoS attack on our local store.
+	if !v.VerifySignatures(addresses) {
+		return errors.New("VAA had bad signatures")
+	}
+
+	return nil
+}
+
 // Push handles incoming VAAs depending on whether it is a pyth or non pyth.
 func (p *vaaGossipConsumer) Push(ctx context.Context, v *vaa.VAA, serializedVaa []byte) error {
-	if err := v.Verify(p.gst.Get().Keys); err != nil {
+	if err := verifyVAA(v, p.gst.Get().Keys); err != nil {
 		p.logger.Error("Received invalid vaa", zap.String("id", v.MessageID()))
 		return err
 	}

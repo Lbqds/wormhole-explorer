@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	gossipv1 "github.com/certusone/wormhole/node/pkg/proto/gossip/v1"
+	gossipv1 "github.com/alephium/wormhole-fork/node/pkg/proto/gossip/v1"
+	"github.com/alephium/wormhole-fork/node/pkg/vaa"
 	eth_common "github.com/ethereum/go-ethereum/common"
-	"github.com/wormhole-foundation/wormhole/sdk/vaa"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
