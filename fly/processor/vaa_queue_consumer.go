@@ -3,32 +3,27 @@ package processor
 import (
 	"context"
 
-	"github.com/wormhole-foundation/wormhole-explorer/fly/queue"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/storage"
 
-	"github.com/wormhole-foundation/wormhole/sdk/vaa"
 	"go.uber.org/zap"
 )
 
-// VAAQueueConsumeFunc is a function to obtain messages from a queue
-type VAAQueueConsumeFunc func(context.Context) <-chan *queue.Message
-
 // VAAQueueConsumer represents a VAA queue consumer.
 type VAAQueueConsumer struct {
-	consume    VAAQueueConsumeFunc
-	repository *storage.Repository
-	logger     *zap.Logger
+	messageQueue <-chan *Message
+	repository   *storage.Repository
+	logger       *zap.Logger
 }
 
 // NewVAAQueueConsumer creates a new VAA queue consumer instances.
 func NewVAAQueueConsumer(
-	consume VAAQueueConsumeFunc,
+	messageQueue <-chan *Message,
 	repository *storage.Repository,
 	logger *zap.Logger) *VAAQueueConsumer {
 	return &VAAQueueConsumer{
-		consume:    consume,
-		repository: repository,
-		logger:     logger,
+		messageQueue: messageQueue,
+		repository:   repository,
+		logger:       logger,
 	}
 }
 
@@ -39,22 +34,15 @@ func (c *VAAQueueConsumer) Start(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case msg := <-c.consume(ctx):
-				v, err := vaa.Unmarshal(msg.Data)
-				if err != nil {
-					c.logger.Error("Error unmarshalling vaa", zap.Error(err))
-					continue
-				}
-
-				err = c.repository.UpsertVaa(ctx, v, msg.Data)
-				if err != nil {
+			case msg := <-c.messageQueue:
+				if err := c.repository.UpsertVaa(ctx, msg.vaa, msg.serialized); err != nil {
 					c.logger.Error("Error inserting vaa in repository",
-						zap.String("id", v.MessageID()),
+						zap.String("id", msg.vaa.MessageID()),
 						zap.Error(err))
 					continue
 				}
 
-				c.logger.Info("Vaa save in repository", zap.String("id", v.MessageID()))
+				c.logger.Info("Vaa save in repository", zap.String("id", msg.vaa.MessageID()))
 			}
 		}
 	}()

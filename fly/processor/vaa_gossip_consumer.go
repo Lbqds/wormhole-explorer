@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/wormhole-foundation/wormhole-explorer/fly/deduplicator"
 
@@ -11,26 +12,23 @@ import (
 )
 
 type vaaGossipConsumer struct {
-	gst            *common.GuardianSetState
-	nonPythProcess VAAPushFunc
-	pythProcess    VAAPushFunc
-	logger         *zap.Logger
-	deduplicator   *deduplicator.Deduplicator
+	gst          *common.GuardianSetState
+	messageQueue chan<- *Message
+	logger       *zap.Logger
+	deduplicator *deduplicator.Deduplicator
 }
 
 // NewVAAGossipConsumer creates a new processor instances.
 func NewVAAGossipConsumer(
 	gst *common.GuardianSetState,
 	deduplicator *deduplicator.Deduplicator,
-	nonPythPublish VAAPushFunc,
-	pythPublish VAAPushFunc,
+	messageQueue chan<- *Message,
 	logger *zap.Logger) *vaaGossipConsumer {
 	return &vaaGossipConsumer{
-		gst:            gst,
-		deduplicator:   deduplicator,
-		nonPythProcess: nonPythPublish,
-		pythProcess:    pythPublish,
-		logger:         logger,
+		gst:          gst,
+		deduplicator: deduplicator,
+		messageQueue: messageQueue,
+		logger:       logger,
 	}
 }
 
@@ -42,10 +40,16 @@ func (p *vaaGossipConsumer) Push(ctx context.Context, v *vaa.VAA, serializedVaa 
 	}
 
 	err := p.deduplicator.Apply(ctx, v.MessageID(), func() error {
-		if vaa.ChainIDPythNet == v.EmitterChain {
-			return p.pythProcess(ctx, v, serializedVaa)
+		message := &Message{
+			vaa:        v,
+			serialized: serializedVaa,
 		}
-		return p.nonPythProcess(ctx, v, serializedVaa)
+		select {
+		case p.messageQueue <- message:
+			return nil
+		default:
+			return fmt.Errorf("message queue is full")
+		}
 	})
 
 	if err != nil {

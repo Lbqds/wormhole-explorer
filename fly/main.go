@@ -11,7 +11,6 @@ import (
 	"github.com/wormhole-foundation/wormhole-explorer/fly/guardiansets"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/migration"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/processor"
-	"github.com/wormhole-foundation/wormhole-explorer/fly/queue"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/server"
 	"github.com/wormhole-foundation/wormhole-explorer/fly/storage"
 
@@ -179,21 +178,13 @@ func main() {
 	}
 	// Creates a deduplicator to discard VAA messages that were processed previously
 	deduplicator := deduplicator.New(cache, logger)
-	// Creates two callbacks
-	vaaQueue := queue.NewVAAInMemory()
-	// Create a vaa notifier
+	// TODO: configable buffer size
+	messageQueue := make(chan *processor.Message, 256)
 	// Creates a instance to consume VAA messages from Gossip network and handle the messages
-	// When recive a message, the message filter by deduplicator
-	// if VAA is from pyhnet should be saved directly to repository
-	// if VAA is from non pyhnet should be publish with nonPythVaaPublish
-	vaaGossipConsumer := processor.NewVAAGossipConsumer(gst, deduplicator, vaaQueue.Publish, repository.UpsertVaa, logger)
-	// Creates a instance to consume VAA messages (non pyth) from a queue and store in a storage
-	vaaQueueConsumer := processor.NewVAAQueueConsumer(vaaQueue.Consume, repository, logger)
-	// Creates a wrapper that splits the incoming VAAs into 2 channels (pyth to non pyth) in order
-	// to be able to process them in a differentiated way
-	vaaGossipConsumerSplitter := processor.NewVAAGossipSplitterConsumer(vaaGossipConsumer.Push, logger)
+	vaaGossipConsumer := processor.NewVAAGossipConsumer(gst, deduplicator, messageQueue, logger)
+	// Creates a instance to consume VAA messages from a queue and store in a storage
+	vaaQueueConsumer := processor.NewVAAQueueConsumer(messageQueue, repository, logger)
 	vaaQueueConsumer.Start(rootCtx)
-	vaaGossipConsumerSplitter.Start(rootCtx)
 
 	// start fly http server.
 	server := server.NewServer(logger, repository)
@@ -211,7 +202,7 @@ func main() {
 					continue
 				}
 				// Push an incoming VAA to be processed
-				if err := vaaGossipConsumerSplitter.Push(rootCtx, v, sVaa.Vaa); err != nil {
+				if err := vaaGossipConsumer.Push(rootCtx, v, sVaa.Vaa); err != nil {
 					logger.Error("Error inserting vaa", zap.Error(err))
 				}
 			}
@@ -286,8 +277,6 @@ func main() {
 		supervisor.WithPropagatePanic)
 
 	<-rootCtx.Done()
-	// TODO: wait for things to shut down gracefully
-	vaaGossipConsumerSplitter.Close()
 	server.Stop()
 }
 

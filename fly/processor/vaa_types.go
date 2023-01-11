@@ -11,3 +11,8 @@ type VAAPushFunc func(context.Context, *vaa.VAA, []byte) error
 
 // VAANotifyFunc is a function to notify saved VAA message.
 type VAANotifyFunc func(context.Context, *vaa.VAA, []byte) error
+
+type Message struct {
+	vaa        *vaa.VAA
+	serialized []byte
+}
