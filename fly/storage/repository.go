@@ -28,7 +28,6 @@ type Repository struct {
 		observations   *mongo.Collection
 		governorConfig *mongo.Collection
 		governorStatus *mongo.Collection
-		vaasPythnet    *mongo.Collection
 		vaaCounts      *mongo.Collection
 	}
 }
@@ -41,7 +40,6 @@ func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
 		observations   *mongo.Collection
 		governorConfig *mongo.Collection
 		governorStatus *mongo.Collection
-		vaasPythnet    *mongo.Collection
 		vaaCounts      *mongo.Collection
 	}{
 		vaas:           db.Collection("vaas"),
@@ -49,7 +47,6 @@ func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
 		observations:   db.Collection("observations"),
 		governorConfig: db.Collection("governorConfig"),
 		governorStatus: db.Collection("governorStatus"),
-		vaasPythnet:    db.Collection("vaasPythnet"),
 		vaaCounts:      db.Collection("vaaCounts")}}
 }
 
@@ -75,13 +72,7 @@ func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []
 	}
 
 	opts := options.Update().SetUpsert(true)
-	var err error
-	var result *mongo.UpdateResult
-	if vaa.ChainIDPythNet == v.EmitterChain {
-		result, err = s.collections.vaasPythnet.UpdateByID(ctx, id, update, opts)
-	} else {
-		result, err = s.collections.vaas.UpdateByID(ctx, id, update, opts)
-	}
+	result, err := s.collections.vaas.UpdateByID(ctx, id, update, opts)
 	if err == nil && s.isNewRecord(result) {
 		s.updateVAACount(v.EmitterChain)
 	}
@@ -96,10 +87,6 @@ func (s *Repository) UpsertObservation(o *gossipv1.SignedObservation) error {
 	//TODO error handling
 	chainId, err := strconv.ParseUint(chainIdStr, 10, 16)
 
-	// TODO should we notify the caller that pyth observations are not stored?
-	if vaa.ChainID(chainId) == vaa.ChainIDPythNet {
-		return nil
-	}
 	sequence, err := strconv.ParseUint(sequenceStr, 10, 64)
 	addr := eth_common.BytesToAddress(o.GetAddr())
 	obs := ObservationUpdate{

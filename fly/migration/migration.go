@@ -6,7 +6,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // TODO: move this to migration tool that support mongodb.
@@ -63,22 +62,6 @@ func Run(db *mongo.Database) error {
 
 	// Create vaas collection.
 	err = db.CreateCollection(context.TODO(), "vaas")
-	if err != nil {
-		target := &mongo.CommandError{}
-		isCommandError := errors.As(err, target)
-		if !isCommandError || err.(mongo.CommandError).Code != 48 {
-			return err
-		}
-	}
-
-	// Create vassPythnet capped collection.
-	isCapped := true
-	var sizeCollection, maxDocuments int64 = 50 * 1024 * 1024, 10000
-	collectionOptions := options.CreateCollectionOptions{
-		Capped:       &isCapped,
-		SizeInBytes:  &sizeCollection,
-		MaxDocuments: &maxDocuments}
-	err = db.CreateCollection(context.TODO(), "vaasPythnet", &collectionOptions)
 	if err != nil {
 		target := &mongo.CommandError{}
 		isCommandError := errors.As(err, target)
