@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 
 	"fmt"
 	"os"
@@ -36,14 +37,6 @@ var (
 	rootCtxCancel context.CancelFunc
 )
 
-var (
-	p2pNetworkID string
-	p2pPort      uint
-	p2pBootstrap string
-	nodeKeyPath  string
-	logLevel     string
-)
-
 // TODO refactor to another file/package
 func newCache() (cache.CacheInterface[bool], error) {
 	c, err := ristretto.NewCache(&ristretto.Config{
@@ -58,42 +51,12 @@ func newCache() (cache.CacheInterface[bool], error) {
 	return cache.New[bool](store), nil
 }
 
-func main() {
-	// Node's main lifecycle context.
+type mongodbConfig struct {
+	mongodbUri   string
+	databaseName string
+}
 
-	rootCtx, rootCtxCancel = context.WithCancel(context.Background())
-	defer rootCtxCancel()
-	// main
-	p2pNetworkID = "/wormhole/mainnet/2"
-	p2pBootstrap = "/dns4/wormhole-mainnet-v2-bootstrap.certus.one/udp/8999/quic/p2p/12D3KooWQp644DK27fd3d4Km3jr7gHiuJJ5ZGmy8hH4py7fP4FP7"
-	// devnet
-	// p2pNetworkID = "/wormhole/dev"
-	// p2pBootstrap = "/dns4/guardian-0.guardian/udp/8999/quic/p2p/12D3KooWL3XJ9EMCyZvmmGXL2LMiVBtrVa2BuESsJiXkSj7333Jw"
-	p2pPort = 8999
-	nodeKeyPath = "/tmp/node.key"
-	logLevel = "warn"
-	common.SetRestrictiveUmask()
-
-	lvl, err := ipfslog.LevelFromString(logLevel)
-	if err != nil {
-		fmt.Println("Invalid log level")
-		os.Exit(1)
-	}
-
-	logger := ipfslog.Logger("wormhole-fly").Desugar()
-
-	ipfslog.SetAllLoggers(lvl)
-
-	// Verify flags
-	if nodeKeyPath == "" {
-		logger.Fatal("Please specify --nodeKey")
-	}
-	if p2pBootstrap == "" {
-		logger.Fatal("Please specify --bootstrap")
-	}
-
-	//TODO: use a configuration structure to obtain the configuration
-	// Setup DB
+func loadMongodbConfig(logger *zap.Logger) *mongodbConfig {
 	if err := godotenv.Load(); err != nil {
 		logger.Info("No .env file found")
 	}
@@ -106,8 +69,45 @@ func main() {
 	if databaseName == "" {
 		logger.Fatal("You must set your 'MONGODB_DATABASE' environmental variable. See\n\t https://www.mongodb.com/docs/drivers/go/current/usage-examples/#environment-variable")
 	}
+	return &mongodbConfig{
+		mongodbUri:   uri,
+		databaseName: databaseName,
+	}
+}
 
-	db, err := storage.GetDB(rootCtx, logger, uri, databaseName)
+func main() {
+	// Node's main lifecycle context.
+	p2pNetworkId := flag.String("id", "/wormhole/dev", "P2P network id")
+	p2pPort := flag.Uint("port", 8999, "P2P UDP listener port")
+	p2pBootstrap := flag.String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
+	nodeKeyPath := flag.String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
+	logLevel := flag.String("logLevel", "debug", "Log level")
+
+	rootCtx, rootCtxCancel = context.WithCancel(context.Background())
+	defer rootCtxCancel()
+	common.SetRestrictiveUmask()
+
+	lvl, err := ipfslog.LevelFromString(*logLevel)
+	if err != nil {
+		fmt.Println("Invalid log level")
+		os.Exit(1)
+	}
+
+	logger := ipfslog.Logger("wormhole-fly").Desugar()
+
+	ipfslog.SetAllLoggers(lvl)
+
+	// Verify flags
+	if *nodeKeyPath == "" {
+		logger.Fatal("Please specify --nodeKey")
+	}
+	if *p2pBootstrap == "" {
+		logger.Fatal("Please specify --bootstrap")
+	}
+
+	mongodbConfig := loadMongodbConfig(logger)
+
+	db, err := storage.GetDB(rootCtx, logger, mongodbConfig.mongodbUri, mongodbConfig.databaseName)
 	if err != nil {
 		logger.Fatal("could not connect to DB", zap.Error(err))
 	}
@@ -265,14 +265,14 @@ func main() {
 
 	// Load p2p private key
 	var priv crypto.PrivKey
-	priv, err = common.GetOrCreateNodeKey(logger, nodeKeyPath)
+	priv, err = common.GetOrCreateNodeKey(logger, *nodeKeyPath)
 	if err != nil {
 		logger.Fatal("Failed to load node key", zap.Error(err))
 	}
 
 	// Run supervisor.
 	supervisor.New(rootCtx, logger, func(ctx context.Context) error {
-		if err := supervisor.Run(ctx, "p2p", p2p.Run(obsvC, obsvReqC, nil, sendC, signedInC, priv, nil, gst, p2pPort, p2pNetworkID, p2pBootstrap, "", false, rootCtxCancel, nil, govConfigC, govStatusC)); err != nil {
+		if err := supervisor.Run(ctx, "p2p", p2p.Run(obsvC, obsvReqC, nil, sendC, signedInC, priv, nil, gst, *p2pPort, *p2pNetworkId, *p2pBootstrap, "", false, rootCtxCancel, nil, govConfigC, govStatusC)); err != nil {
 			return err
 		}
 
