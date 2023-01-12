@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"time"
 
 	"fmt"
 	"os"
@@ -80,7 +81,16 @@ func main() {
 	p2pPort := flag.Uint("port", 8999, "P2P UDP listener port")
 	p2pBootstrap := flag.String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
 	nodeKeyPath := flag.String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
+	network := flag.String("network", "devnet", "Network type(devnet, testnet, mainnet)")
 	logLevel := flag.String("logLevel", "debug", "Log level")
+	fetchMissingVaasDuration := flag.Uint("fetchMissingVaasDuration", 300, "Fetch missing vaas duration")
+	fetchVaaBatchSize := flag.Uint("fetchVaaBatchSize", 20, "Fetch vaa batch size")
+
+	bridgeConfig, err := common.ReadConfigsByNetwork(*network)
+	if err != nil {
+		fmt.Printf("failed to read bridge config, error: %v\n", err)
+		os.Exit(1)
+	}
 
 	rootCtx, rootCtxCancel = context.WithCancel(context.Background())
 	defer rootCtxCancel()
@@ -141,6 +151,18 @@ func main() {
 	// TODO: fetch this and probably figure out how to update it live
 	gs := guardiansets.GetLatest()
 	gst.Set(&gs)
+
+	fetcher, err := storage.NewFetcher(
+		bridgeConfig,
+		repository,
+		time.Duration(*fetchMissingVaasDuration)*time.Second,
+		logger,
+		uint32(*fetchVaaBatchSize),
+	)
+	if err != nil {
+		logger.Fatal("failed to init fetcher", zap.Error(err))
+	}
+	fetcher.Start(rootCtx)
 
 	// Ignore observation requests
 	// Note: without this, the whole program hangs on observation requests

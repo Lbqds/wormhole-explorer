@@ -14,6 +14,9 @@ type emitterId struct {
 	emitterChain   vaa.ChainID
 	emitterAddress vaa.Address
 	targetChain    vaa.ChainID
+
+	// cached value
+	idStr *string
 }
 
 func (e *emitterId) isGovernanceEmitter() bool {
@@ -21,7 +24,21 @@ func (e *emitterId) isGovernanceEmitter() bool {
 }
 
 func (e *emitterId) toString() string {
-	return fmt.Sprintf("%d/%s/%d", e.emitterChain, e.emitterAddress.String(), e.targetChain)
+	if e.idStr != nil {
+		return *e.idStr
+	}
+	var str string
+	if e.isGovernanceEmitter() {
+		str = fmt.Sprintf("%d/%s/%d", e.emitterChain, e.emitterAddress.String(), vaa.ChainIDUnset)
+	} else {
+		str = fmt.Sprintf("%d/%s/%d", e.emitterChain, e.emitterAddress.String(), e.targetChain)
+	}
+	e.idStr = &str
+	return str
+}
+
+func (e *emitterId) toVaaId(seq uint64) string {
+	return fmt.Sprintf("%s/%d", e.toString(), seq)
 }
 
 type sequencesCache struct {
