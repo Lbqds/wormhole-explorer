@@ -22,6 +22,10 @@ type VaaUpdate struct {
 	UpdatedAt        *time.Time  `bson:"updatedAt"`
 }
 
+type MissingVaaUpdate struct {
+	ID string `bson:"_id"`
+}
+
 type ObservationUpdate struct {
 	MessageID    string      `bson:"messageId"`
 	ChainID      vaa.ChainID `bson:"emitterChain"`

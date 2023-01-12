@@ -23,6 +23,7 @@ type Repository struct {
 	log         *zap.Logger
 	collections struct {
 		vaas         *mongo.Collection
+		missingVaas  *mongo.Collection
 		heartbeats   *mongo.Collection
 		observations *mongo.Collection
 		vaaCounts    *mongo.Collection
@@ -33,11 +34,13 @@ type Repository struct {
 func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
 	return &Repository{db, log, struct {
 		vaas         *mongo.Collection
+		missingVaas  *mongo.Collection
 		heartbeats   *mongo.Collection
 		observations *mongo.Collection
 		vaaCounts    *mongo.Collection
 	}{
 		vaas:         db.Collection("vaas"),
+		missingVaas:  db.Collection("missingVaas"),
 		heartbeats:   db.Collection("heartbeats"),
 		observations: db.Collection("observations"),
 		vaaCounts:    db.Collection("vaaCounts")}}
@@ -47,7 +50,7 @@ func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []
 	id := v.MessageID()
 	now := time.Now()
 	vaaDoc := VaaUpdate{
-		ID:               v.MessageID(),
+		ID:               id,
 		Timestamp:        &v.Timestamp,
 		Version:          v.Version,
 		EmitterChain:     v.EmitterChain,
@@ -69,6 +72,20 @@ func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []
 	if err == nil && s.isNewRecord(result) {
 		s.updateVAACount(v.EmitterChain)
 	}
+	return err
+}
+
+func (s *Repository) UpsertMissingVaa(ctx context.Context, vaaId string) error {
+	now := time.Now()
+	missingVaaDoc := MissingVaaUpdate{ID: vaaId}
+
+	update := bson.M{
+		"$set":         missingVaaDoc,
+		"$setOnInsert": indexedAt(now),
+	}
+
+	opts := options.Update().SetUpsert(true)
+	_, err := s.collections.missingVaas.UpdateByID(ctx, vaaId, update, opts)
 	return err
 }
 

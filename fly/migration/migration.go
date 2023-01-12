@@ -50,6 +50,17 @@ func Run(db *mongo.Database) error {
 		}
 	}
 
+	// Create missing vaas collection.
+	err = db.CreateCollection(context.TODO(), "missingVaas")
+	// TODO: improve error handling
+	if err != nil {
+		target := &mongo.CommandError{}
+		isCommandError := errors.As(err, target)
+		if !isCommandError || err.(mongo.CommandError).Code != 48 {
+			return err
+		}
+	}
+
 	// create index in vaas collection by vaa key (emitterchain, emitterAddr, sequence)
 	indexVaaByKey := mongo.IndexModel{
 		Keys: bson.D{
