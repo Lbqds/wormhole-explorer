@@ -15,7 +15,8 @@ type VaaUpdate struct {
 	Version          uint8       `bson:"version"`
 	EmitterChain     vaa.ChainID `bson:"emitterChain"`
 	EmitterAddr      string      `bson:"emitterAddr"`
-	Sequence         string      `bson:"sequence"`
+	TargetChain      vaa.ChainID `bson:"targetChain"`
+	Sequence         uint64      `bson:"sequence"`
 	GuardianSetIndex uint32      `bson:"guardianSetIndex"`
 	Vaa              []byte      `bson:"vaas"`
 	Timestamp        *time.Time  `bson:"timestamp"`
@@ -28,9 +29,10 @@ type MissingVaaUpdate struct {
 
 type ObservationUpdate struct {
 	MessageID    string      `bson:"messageId"`
-	ChainID      vaa.ChainID `bson:"emitterChain"`
+	EmitterChain vaa.ChainID `bson:"emitterChain"`
 	Emitter      string      `bson:"emitterAddr"`
-	Sequence     string      `bson:"sequence"`
+	TargetChain  vaa.ChainID `bson:"targetChain"`
+	Sequence     uint64      `bson:"sequence"`
 	Hash         []byte      `bson:"hash"`
 	TxHash       []byte      `bson:"txHash"`
 	GuardianAddr string      `bson:"guardianAddr"`

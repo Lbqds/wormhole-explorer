@@ -55,7 +55,8 @@ func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []
 		Version:          v.Version,
 		EmitterChain:     v.EmitterChain,
 		EmitterAddr:      v.EmitterAddress.String(),
-		Sequence:         strconv.FormatUint(v.Sequence, 10),
+		TargetChain:      v.TargetChain,
+		Sequence:         v.Sequence,
 		GuardianSetIndex: v.GuardianSetIndex,
 		Vaa:              serializedVaa,
 		UpdatedAt:        &now,
@@ -91,23 +92,30 @@ func (s *Repository) UpsertMissingVaa(ctx context.Context, vaaId string) error {
 
 func (s *Repository) UpsertObservation(o *gossipv1.SignedObservation) error {
 	vaaID := strings.Split(o.MessageId, "/")
-	chainIdStr, emitter, sequenceStr := vaaID[0], vaaID[1], vaaID[2]
+	if len(vaaID) != 4 {
+		return fmt.Errorf("invalid vaa id: %s", o.MessageId)
+	}
+	emitterChainIdStr, emitter, targetChainIdStr, sequenceStr := vaaID[0], vaaID[1], vaaID[2], vaaID[3]
 	id := fmt.Sprintf("%s/%s/%s", o.MessageId, hex.EncodeToString(o.Addr), hex.EncodeToString(o.Hash))
 	now := time.Now()
-	chainId, err := strconv.ParseUint(chainIdStr, 10, 16)
+	emitterChain, err := strconv.ParseUint(emitterChainIdStr, 10, 16)
 	if err != nil {
 		return err
 	}
-
+	targetChain, err := strconv.ParseUint(targetChainIdStr, 10, 16)
+	if err != nil {
+		return err
+	}
 	sequence, err := strconv.ParseUint(sequenceStr, 10, 64)
 	if err != nil {
 		return err
 	}
 	addr := eth_common.BytesToAddress(o.GetAddr())
 	obs := ObservationUpdate{
-		ChainID:      vaa.ChainID(chainId),
+		EmitterChain: vaa.ChainID(emitterChain),
 		Emitter:      emitter,
-		Sequence:     strconv.FormatUint(sequence, 10),
+		TargetChain:  vaa.ChainID(targetChain),
+		Sequence:     sequence,
 		MessageID:    o.GetMessageId(),
 		Hash:         o.GetHash(),
 		TxHash:       o.GetTxHash(),
