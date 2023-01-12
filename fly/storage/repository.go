@@ -21,6 +21,7 @@ import (
 type Repository struct {
 	db          *mongo.Database
 	log         *zap.Logger
+	cache       *sequencesCache
 	collections struct {
 		vaas         *mongo.Collection
 		missingVaas  *mongo.Collection
@@ -32,7 +33,8 @@ type Repository struct {
 
 // TODO wrap repository with a service that filters using redis
 func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
-	return &Repository{db, log, struct {
+	cache := newSequencesCache()
+	return &Repository{db, log, cache, struct {
 		vaas         *mongo.Collection
 		missingVaas  *mongo.Collection
 		heartbeats   *mongo.Collection
@@ -46,7 +48,72 @@ func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
 		vaaCounts:    db.Collection("vaaCounts")}}
 }
 
+func (s *Repository) getMissingSequences(ctx context.Context, emitterId *emitterId, sequence uint64) ([]uint64, error) {
+	seq := s.cache.getNextSequence(emitterId)
+	if seq == nil {
+		nextSeq, err := s.nextSequence(ctx, emitterId)
+		if err != nil {
+			return nil, err
+		}
+		s.cache.setNextSequence(emitterId, *nextSeq)
+		seq = nextSeq
+	}
+
+	if *seq >= sequence {
+		return nil, nil
+	}
+	size := int(sequence - *seq)
+	vaaIds := make([]uint64, size)
+	for i := 0; i < size; i++ {
+		vaaIds[i] = *seq + uint64(i)
+	}
+	return vaaIds, nil
+}
+
+func (s *Repository) upsertMissingIds(ctx context.Context, emitterId *emitterId, sequence uint64) error {
+	missingSequences, err := s.getMissingSequences(ctx, emitterId, sequence)
+	if err != nil {
+		return err
+	}
+	if missingSequences == nil {
+		return nil
+	}
+	s.cache.setNextSequence(emitterId, sequence)
+	var (
+		now      = time.Now()
+		models   = make([]mongo.WriteModel, len(missingSequences))
+		idPrefix = emitterId.toString()
+	)
+	for i, seq := range missingSequences {
+		id := fmt.Sprintf("%s/%d", idPrefix, seq)
+		doc, err := toDoc(MissingVaaUpdate{id})
+		if err != nil {
+			return err
+		}
+		update := bson.D{
+			{Key: "$set", Value: doc},
+			{Key: "$setOnInsert", Value: indexedAt(now)},
+		}
+		filter := bson.D{{Key: "_id", Value: id}}
+		models[i] = mongo.NewUpdateOneModel().SetUpdate(update).SetUpsert(true).SetFilter(filter)
+	}
+	opts := options.BulkWrite().SetOrdered(true)
+	_, err = s.collections.missingVaas.BulkWrite(ctx, models, opts)
+	return err
+}
+
 func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []byte) error {
+	// TODO: insert transactionally
+	emitterId := &emitterId{
+		emitterChain:   v.EmitterChain,
+		emitterAddress: v.EmitterAddress,
+		targetChain:    v.TargetChain,
+	}
+	err := s.upsertMissingIds(ctx, emitterId, v.Sequence)
+	if err != nil {
+		return nil
+	}
+
 	id := v.MessageID()
 	now := time.Now()
 	vaaDoc := VaaUpdate{
@@ -74,6 +141,58 @@ func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []
 		s.updateVAACount(v.EmitterChain)
 	}
 	return err
+}
+
+func (s *Repository) nextSequence(ctx context.Context, emitterId *emitterId) (*uint64, error) {
+	if emitterId.isGovernanceEmitter() {
+		return s.nextGovernanceSequence(ctx, emitterId.emitterChain, emitterId.emitterAddress)
+	}
+	return s.nextEmitterSequence(ctx, emitterId)
+}
+
+func (s *Repository) nextEmitterSequence(ctx context.Context, emitterId *emitterId) (*uint64, error) {
+	findOptions := options.Find().SetAllowDiskUse(true).SetSort(bson.D{{Key: "sequence", Value: -1}}).SetLimit(1)
+	filter := bson.M{
+		"emitterChain": emitterId.emitterChain,
+		"emitterAddr":  emitterId.emitterAddress.String(),
+		"targetChain":  emitterId.targetChain,
+	}
+	cursor, err := s.collections.vaas.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	return extractSequenceFromCursor(ctx, cursor)
+}
+
+func (s *Repository) nextGovernanceSequence(
+	ctx context.Context,
+	governanceChain vaa.ChainID,
+	governanceAddr vaa.Address,
+) (*uint64, error) {
+	findOptions := options.Find().SetAllowDiskUse(true).SetSort(bson.D{{Key: "sequence", Value: -1}}).SetLimit(1)
+	filter := bson.M{
+		"emitterChain": governanceChain,
+		"emitterAddr":  governanceAddr.String(),
+	}
+	cursor, err := s.collections.vaas.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	return extractSequenceFromCursor(ctx, cursor)
+}
+
+func extractSequenceFromCursor(ctx context.Context, cursor *mongo.Cursor) (*uint64, error) {
+	if !cursor.Next(ctx) {
+		nextSequence := uint64(0)
+		return &nextSequence, nil
+	}
+	var res bson.M
+	err := cursor.Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+	nextSequence := uint64(res["sequence"].(int64) + 1)
+	return &nextSequence, nil
 }
 
 func (s *Repository) UpsertMissingVaa(ctx context.Context, vaaId string) error {
@@ -169,4 +288,17 @@ func (r *Repository) GetMongoStatus(ctx context.Context) (*MongoStatus, error) {
 		return nil, err
 	}
 	return &mongoStatus, nil
+}
+
+func toDoc(v interface{}) (*bson.D, error) {
+	var doc *bson.D
+	data, err := bson.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = bson.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	return doc, err
 }
