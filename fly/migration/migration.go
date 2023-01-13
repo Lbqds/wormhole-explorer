@@ -61,6 +61,17 @@ func Run(db *mongo.Database) error {
 		}
 	}
 
+	missingVaaIndexes := mongo.IndexModel{Keys: bson.D{{Key: "indexedAt", Value: -1}}}
+	// create indexes in missing vaas collection
+	_, err = db.Collection("missingVaas").Indexes().CreateOne(context.TODO(), missingVaaIndexes)
+	if err != nil {
+		target := &mongo.CommandError{}
+		isCommandError := errors.As(err, target)
+		if !isCommandError || err.(mongo.CommandError).Code != 48 {
+			return err
+		}
+	}
+
 	vaaIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -86,7 +97,7 @@ func Run(db *mongo.Database) error {
 		},
 	}
 
-	// create indexex in vaas collection
+	// create indexes in vaas collection
 	_, err = db.Collection("vaas").Indexes().CreateMany(context.TODO(), vaaIndexes)
 	if err != nil {
 		target := &mongo.CommandError{}
@@ -110,7 +121,7 @@ func Run(db *mongo.Database) error {
 		},
 	}
 
-	// create indexex in observations collection
+	// create indexes in observations collection
 	_, err = db.Collection("observations").Indexes().CreateMany(context.TODO(), observationIndexes)
 	if err != nil {
 		target := &mongo.CommandError{}
