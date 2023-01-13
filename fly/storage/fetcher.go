@@ -122,6 +122,7 @@ func (f *Fetcher) fetchMissingVaas(
 	if err != nil {
 		return err
 	}
+	f.logger.Info("fetch missing vaas", zap.String("emitter", emitterId.toString()), zap.Uint64s("seqs", seqs))
 	filteredSeqs, removedSeqs := f.filterSeqs(ctx, emitterId, seqs)
 	if len(filteredSeqs) == 0 {
 		return f.repository.removeMissingIds(ctx, emitterId, removedSeqs)
@@ -163,6 +164,7 @@ func handleFetchResponse[T vaaEntry](f *Fetcher, ctx context.Context, emitterId 
 	if err := f.repository.upsertVaas(ctx, serializedVaas); err != nil {
 		return err
 	}
+	f.logger.Info("remove missing vaa ids", zap.String("emitter", emitterId.toString()), zap.Uint64s("seqs", removedSeqs))
 	return f.repository.removeMissingIds(ctx, emitterId, removedSeqs)
 }
 

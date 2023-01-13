@@ -98,6 +98,7 @@ func (gs *GuardianSets) handleGuardianSet(ctx context.Context, index uint32, add
 		return fmt.Errorf("invalid guardian set index: %v, current guardian set index: %v", index, gs.currentGuardianSetIndex)
 	}
 	if index == uint32(gs.currentGuardianSetIndex) {
+		gs.logger.Debug("guardian set not changed", zap.Int("index", gs.currentGuardianSetIndex))
 		return nil
 	}
 	guardianSetAddresses := make([]eth_common.Address, len(addresses))
@@ -109,6 +110,7 @@ func (gs *GuardianSets) handleGuardianSet(ctx context.Context, index uint32, add
 		Index: index,
 	}
 
+	gs.logger.Info("new guardian set", zap.Uint32("index", index), zap.Strings("addresses", addresses))
 	gs.guardianSetC <- guardianSet
 	if index == uint32(gs.currentGuardianSetIndex)+1 {
 		gs.lock.Lock()
@@ -118,6 +120,11 @@ func (gs *GuardianSets) handleGuardianSet(ctx context.Context, index uint32, add
 		return nil
 	}
 
+	gs.logger.Info(
+		"trying to get missing guardian sets from chain",
+		zap.Int("current", gs.currentGuardianSetIndex),
+		zap.Uint32("latestIndex", index),
+	)
 	contract, err := getContract(ctx, gs.ethRpcUrl, gs.ethGovernanceAddress)
 	if err != nil {
 		return err
