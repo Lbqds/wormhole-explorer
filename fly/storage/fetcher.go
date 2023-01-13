@@ -67,6 +67,7 @@ func NewFetcher(
 	duration time.Duration,
 	logger *zap.Logger,
 	batchSize uint32,
+	guardianGrpcUrl string,
 ) (*Fetcher, error) {
 	emitterIds, err := loadEmitterIds(config)
 	if err != nil {
@@ -78,7 +79,7 @@ func NewFetcher(
 		duration:   duration,
 		logger:     logger,
 		batchSize:  batchSize,
-		guardian:   config.Guardian.GuardianUrls[0],
+		guardian:   guardianGrpcUrl,
 	}, nil
 }
 

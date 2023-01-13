@@ -1,7 +1,7 @@
 package server
 
 import (
-	"os"
+	"strconv"
 
 	"github.com/alephium/wormhole-fork/explorer/fly/storage"
 	"github.com/gofiber/fiber/v2"
@@ -15,11 +15,7 @@ type Server struct {
 	logger *zap.Logger
 }
 
-func NewServer(logger *zap.Logger, repository *storage.Repository) *Server {
-	port := os.Getenv("API_PORT")
-	if port == "" {
-		logger.Fatal("You must set your 'API_PORT' environmental variable")
-	}
+func NewServer(logger *zap.Logger, repository *storage.Repository, apiPort uint) *Server {
 	ctrl := NewController(repository)
 	app := fiber.New()
 	app.Use(fiberLog.New(fiberLog.Config{
@@ -30,7 +26,7 @@ func NewServer(logger *zap.Logger, repository *storage.Repository) *Server {
 	api.Get("/ready", ctrl.ReadyCheck)
 	return &Server{
 		app:    app,
-		port:   port,
+		port:   strconv.FormatUint(uint64(apiPort), 10),
 		logger: logger,
 	}
 }

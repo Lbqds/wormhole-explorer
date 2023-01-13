@@ -86,7 +86,10 @@ var (
 	p2pNetworkId             *string
 	p2pPort                  *uint
 	p2pBootstrap             *string
+	apiPort                  *uint
 	nodeKeyPath              *string
+	guardianGrpcUrl          *string
+	ethRpcUrl                *string
 	network                  *string
 	logLevel                 *string
 	fetchMissingVaasDuration *uint
@@ -98,7 +101,10 @@ func init() {
 	p2pNetworkId = rootCmd.Flags().String("id", "/wormhole/dev", "P2P network id")
 	p2pPort = rootCmd.Flags().Uint("port", 8999, "P2P UDP listener port")
 	p2pBootstrap = rootCmd.Flags().String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
+	apiPort = rootCmd.Flags().Uint("apiPort", 25555, "Server API port")
 	nodeKeyPath = rootCmd.Flags().String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
+	guardianGrpcUrl = rootCmd.Flags().String("guardianGrpcUrl", "127.0.0.1:7070", "Guardian grpc url")
+	ethRpcUrl = rootCmd.Flags().String("ethRpcUrl", "http://127.0.0.1:8545", "ETH rpc url")
 	network = rootCmd.Flags().String("network", "devnet", "Network type(devnet, testnet, mainnet)")
 	logLevel = rootCmd.Flags().String("logLevel", "debug", "Log level")
 	fetchMissingVaasDuration = rootCmd.Flags().Uint("fetchMissingVaasDuration", 300, "Fetch missing vaas duration")
@@ -166,8 +172,7 @@ func run(cmd *cobra.Command, args []string) {
 	heartbeatC := make(chan *gossipv1.Heartbeat, 50)
 
 	ethGovernanceAddress := eth_common.HexToAddress(bridgeConfig.Ethereum.CoreEmitterAddress)
-	ethRpcUrl := getEthRpcUrl(bridgeConfig.Ethereum.NodeUrl)
-	guardianSetList, err := guardiansets.GetGuardianSetsFromChain(rootCtx, ethRpcUrl, ethGovernanceAddress)
+	guardianSetList, err := guardiansets.GetGuardianSetsFromChain(rootCtx, *ethRpcUrl, ethGovernanceAddress)
 	if err != nil {
 		logger.Fatal("failed to get guardian sets from chain", zap.Error(err))
 	}
@@ -175,8 +180,8 @@ func run(cmd *cobra.Command, args []string) {
 	guardianSetC := make(chan *common.GuardianSet, 1)
 	guardianSets := guardiansets.NewGuardianSets(
 		guardianSetList,
-		bridgeConfig.Guardian.GuardianUrls[0],
-		ethRpcUrl,
+		*guardianGrpcUrl,
+		*ethRpcUrl,
 		logger,
 		time.Duration(*fetchGuardianSetDuration)*time.Second,
 		ethGovernanceAddress,
@@ -196,6 +201,7 @@ func run(cmd *cobra.Command, args []string) {
 		time.Duration(*fetchMissingVaasDuration)*time.Second,
 		logger,
 		uint32(*fetchVaaBatchSize),
+		*guardianGrpcUrl,
 	)
 	if err != nil {
 		logger.Fatal("failed to init fetcher", zap.Error(err))
@@ -244,7 +250,7 @@ func run(cmd *cobra.Command, args []string) {
 	vaaQueueConsumer.Start(rootCtx)
 
 	// start fly http server.
-	server := server.NewServer(logger, repository)
+	server := server.NewServer(logger, repository, *apiPort)
 	server.Start()
 
 	go func() {
