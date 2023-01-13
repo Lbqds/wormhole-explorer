@@ -33,9 +33,10 @@ func loadEmitterIds(config *common.BridgeConfig) ([]*emitterId, error) {
 				return nil, err
 			}
 			emitterIds = append(emitterIds, &emitterId{
-				emitterChain:   emitterChain.chainId,
-				emitterAddress: emitterAddress,
-				targetChain:    targetChain.chainId,
+				emitterChain:        emitterChain.chainId,
+				emitterAddress:      emitterAddress,
+				targetChain:         targetChain.chainId,
+				isGovernanceEmitter: false,
 			})
 		}
 	}
@@ -44,8 +45,9 @@ func loadEmitterIds(config *common.BridgeConfig) ([]*emitterId, error) {
 		return nil, err
 	}
 	governanceEmitterId := &emitterId{
-		emitterChain:   vaa.ChainID(config.Guardian.GovernanceChainId),
-		emitterAddress: governanceEmitter,
+		emitterChain:        vaa.ChainID(config.Guardian.GovernanceChainId),
+		emitterAddress:      governanceEmitter,
+		isGovernanceEmitter: true,
 	}
 	emitterIds = append(emitterIds, governanceEmitterId)
 	return emitterIds, nil
@@ -130,7 +132,7 @@ func (f *Fetcher) fetchMissingVaas(
 		return f.repository.removeMissingIds(ctx, emitterId, removedSeqs)
 	}
 
-	if emitterId.isGovernanceEmitter() {
+	if emitterId.isGovernanceEmitter {
 		request := &publicrpcv1.GetGovernanceVAABatchRequest{Sequences: filteredSeqs}
 		response, err := client.GetGovernanceVAABatch(ctx, request)
 		if err != nil {

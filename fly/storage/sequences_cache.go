@@ -6,21 +6,14 @@ import (
 	"github.com/alephium/wormhole-fork/node/pkg/vaa"
 )
 
-// TODO: read from config
-var governanceChain = vaa.ChainIDUnset
-var governanceAddr = vaa.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4}
-
 type emitterId struct {
-	emitterChain   vaa.ChainID
-	emitterAddress vaa.Address
-	targetChain    vaa.ChainID
+	emitterChain        vaa.ChainID
+	emitterAddress      vaa.Address
+	targetChain         vaa.ChainID
+	isGovernanceEmitter bool
 
 	// cached value
 	idStr *string
-}
-
-func (e *emitterId) isGovernanceEmitter() bool {
-	return e.emitterChain == governanceChain && e.emitterAddress == governanceAddr
 }
 
 func (e *emitterId) toString() string {
@@ -28,7 +21,7 @@ func (e *emitterId) toString() string {
 		return *e.idStr
 	}
 	var str string
-	if e.isGovernanceEmitter() {
+	if e.isGovernanceEmitter {
 		str = fmt.Sprintf("%d/%s/%d", e.emitterChain, e.emitterAddress.String(), vaa.ChainIDUnset)
 	} else {
 		str = fmt.Sprintf("%d/%s/%d", e.emitterChain, e.emitterAddress.String(), e.targetChain)
@@ -54,7 +47,7 @@ func newSequencesCache() *sequencesCache {
 }
 
 func (s *sequencesCache) getNextSequence(emitterId *emitterId) *uint64 {
-	if emitterId.isGovernanceEmitter() {
+	if emitterId.isGovernanceEmitter {
 		return s.governanceSequence
 	}
 	seq, ok := s.sequences[*emitterId]
@@ -65,7 +58,7 @@ func (s *sequencesCache) getNextSequence(emitterId *emitterId) *uint64 {
 }
 
 func (s *sequencesCache) setNextSequence(emitterId *emitterId, seq uint64) {
-	if emitterId.isGovernanceEmitter() {
+	if emitterId.isGovernanceEmitter {
 		s.governanceSequence = &seq
 	}
 	s.sequences[*emitterId] = seq

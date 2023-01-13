@@ -147,7 +147,7 @@ func (s *Repository) upsertVaa(ctx context.Context, v *vaa.VAA, serialized []byt
 
 func (s *Repository) HasVAA(ctx context.Context, emitterId *emitterId, seq uint64) (bool, error) {
 	var filter interface{}
-	if emitterId.isGovernanceEmitter() {
+	if emitterId.isGovernanceEmitter {
 		filter = bson.D{
 			{Key: "emitterChain", Value: emitterId.emitterChain},
 			{Key: "emitterAddr", Value: emitterId.emitterAddress.String()},
@@ -182,7 +182,7 @@ func (s *Repository) upsertVaas(ctx context.Context, vaas [][]byte) error {
 }
 
 func (s *Repository) nextSequence(ctx context.Context, emitterId *emitterId) (*uint64, error) {
-	if emitterId.isGovernanceEmitter() {
+	if emitterId.isGovernanceEmitter {
 		return s.nextGovernanceSequence(ctx, emitterId.emitterChain, emitterId.emitterAddress)
 	}
 	return s.nextEmitterSequence(ctx, emitterId)
