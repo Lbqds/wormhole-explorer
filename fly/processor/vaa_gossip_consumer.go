@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/alephium/wormhole-fork/explorer/fly/deduplicator"
+	"github.com/alephium/wormhole-fork/explorer/fly/guardiansets"
 
-	"github.com/alephium/wormhole-fork/node/pkg/common"
 	"github.com/alephium/wormhole-fork/node/pkg/processor"
 	"github.com/alephium/wormhole-fork/node/pkg/vaa"
 	ethCommon "github.com/ethereum/go-ethereum/common"
@@ -15,7 +15,7 @@ import (
 )
 
 type vaaGossipConsumer struct {
-	gst          *common.GuardianSetState
+	guardianSets *guardiansets.GuardianSets
 	messageQueue chan<- *Message
 	logger       *zap.Logger
 	deduplicator *deduplicator.Deduplicator
@@ -23,12 +23,12 @@ type vaaGossipConsumer struct {
 
 // NewVAAGossipConsumer creates a new processor instances.
 func NewVAAGossipConsumer(
-	gst *common.GuardianSetState,
+	guardianSets *guardiansets.GuardianSets,
 	deduplicator *deduplicator.Deduplicator,
 	messageQueue chan<- *Message,
 	logger *zap.Logger) *vaaGossipConsumer {
 	return &vaaGossipConsumer{
-		gst:          gst,
+		guardianSets: guardianSets,
 		deduplicator: deduplicator,
 		messageQueue: messageQueue,
 		logger:       logger,
@@ -61,12 +61,16 @@ func verifyVAA(v *vaa.VAA, addresses []ethCommon.Address) error {
 
 // Push handles incoming VAAs depending on whether it is a pyth or non pyth.
 func (p *vaaGossipConsumer) Push(ctx context.Context, v *vaa.VAA, serializedVaa []byte) error {
-	if err := verifyVAA(v, p.gst.Get().Keys); err != nil {
+	guardianSet, err := p.guardianSets.GetGuardianSet(int(v.GuardianSetIndex))
+	if err != nil {
+		return err
+	}
+	if err := verifyVAA(v, guardianSet.Keys); err != nil {
 		p.logger.Error("Received invalid vaa", zap.String("id", v.MessageID()))
 		return err
 	}
 
-	err := p.deduplicator.Apply(ctx, v.MessageID(), func() error {
+	err = p.deduplicator.Apply(ctx, v.MessageID(), func() error {
 		message := &Message{
 			vaa:        v,
 			serialized: serializedVaa,

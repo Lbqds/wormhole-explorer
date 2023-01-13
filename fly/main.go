@@ -85,6 +85,7 @@ func main() {
 	logLevel := flag.String("logLevel", "debug", "Log level")
 	fetchMissingVaasDuration := flag.Uint("fetchMissingVaasDuration", 300, "Fetch missing vaas duration")
 	fetchVaaBatchSize := flag.Uint("fetchVaaBatchSize", 20, "Fetch vaa batch size")
+	fetchGuarduanSetDuration := flag.Uint("fetchGuardianSetDuration", 5, "Fetch guardian set duration")
 
 	bridgeConfig, err := common.ReadConfigsByNetwork(*network)
 	if err != nil {
@@ -98,7 +99,7 @@ func main() {
 
 	lvl, err := ipfslog.LevelFromString(*logLevel)
 	if err != nil {
-		fmt.Println("Invalid log level")
+		fmt.Printf("invalid log level, error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -144,13 +145,29 @@ func main() {
 	// Heartbeat updates
 	heartbeatC := make(chan *gossipv1.Heartbeat, 50)
 
+	ethGovernanceAddress := eth_common.HexToAddress(bridgeConfig.Ethereum.CoreEmitterAddress)
+	guardianSetList, err := guardiansets.GetGuardianSetsFromChain(rootCtx, bridgeConfig.Ethereum.NodeUrl, ethGovernanceAddress)
+	if err != nil {
+		logger.Fatal("failed to get guardian sets from chain", zap.Error(err))
+	}
+
+	guardianSetC := make(chan *common.GuardianSet, 1)
+	guardianSets := guardiansets.NewGuardianSets(
+		guardianSetList,
+		bridgeConfig.Guardian.GuardianUrls[0],
+		bridgeConfig.Ethereum.NodeUrl,
+		logger,
+		time.Duration(*fetchGuarduanSetDuration)*time.Second,
+		ethGovernanceAddress,
+		guardianSetC,
+	)
+	guardianSets.UpdateGuardianSet(rootCtx) // Update guardian set periodically
+
 	// Guardian set state managed by processor
 	gst := common.NewGuardianSetState(heartbeatC)
 
 	// Bootstrap guardian set, otherwise heartbeats would be skipped
-	// TODO: fetch this and probably figure out how to update it live
-	gs := guardiansets.GetLatest()
-	gst.Set(&gs)
+	gst.Set(guardianSets.GetCurrentGuardianSet())
 
 	fetcher, err := storage.NewFetcher(
 		bridgeConfig,
@@ -174,6 +191,8 @@ func main() {
 			select {
 			case <-rootCtx.Done():
 				return
+			case latestGuardianSet := <-guardianSetC:
+				gst.Set(latestGuardianSet)
 			case o := <-obsvC:
 				ok := verifyObservation(logger, o, gst.Get())
 				if !ok {
@@ -198,7 +217,7 @@ func main() {
 	// TODO: configable buffer size
 	messageQueue := make(chan *processor.Message, 256)
 	// Creates a instance to consume VAA messages from Gossip network and handle the messages
-	vaaGossipConsumer := processor.NewVAAGossipConsumer(gst, deduplicator, messageQueue, logger)
+	vaaGossipConsumer := processor.NewVAAGossipConsumer(guardianSets, deduplicator, messageQueue, logger)
 	// Creates a instance to consume VAA messages from a queue and store in a storage
 	vaaQueueConsumer := processor.NewVAAQueueConsumer(messageQueue, repository, logger)
 	vaaQueueConsumer.Start(rootCtx)
