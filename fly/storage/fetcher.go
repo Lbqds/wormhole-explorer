@@ -9,6 +9,7 @@ import (
 	"github.com/alephium/wormhole-fork/node/pkg/vaa"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func loadEmitterIds(config *common.BridgeConfig) ([]*emitterId, error) {
@@ -86,7 +87,7 @@ func (f *Fetcher) Start(ctx context.Context) {
 }
 
 func (f *Fetcher) start(ctx context.Context) {
-	conn, err := grpc.Dial(f.guardian)
+	conn, err := grpc.Dial(f.guardian, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		f.logger.Fatal("failed to connect to guardian", zap.Error(err))
 	}

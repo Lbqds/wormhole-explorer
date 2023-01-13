@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type GuardianSets struct {
@@ -66,7 +67,7 @@ func (gs *GuardianSets) UpdateGuardianSet(ctx context.Context) {
 }
 
 func (gs *GuardianSets) updateGuardianSet(ctx context.Context) {
-	conn, err := grpc.Dial(gs.guardianUrl)
+	conn, err := grpc.Dial(gs.guardianUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		gs.logger.Fatal("failed to connect to guardian", zap.Error(err))
 	}

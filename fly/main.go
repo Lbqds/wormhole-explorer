@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"fmt"
@@ -165,7 +166,8 @@ func run(cmd *cobra.Command, args []string) {
 	heartbeatC := make(chan *gossipv1.Heartbeat, 50)
 
 	ethGovernanceAddress := eth_common.HexToAddress(bridgeConfig.Ethereum.CoreEmitterAddress)
-	guardianSetList, err := guardiansets.GetGuardianSetsFromChain(rootCtx, bridgeConfig.Ethereum.NodeUrl, ethGovernanceAddress)
+	ethRpcUrl := getEthRpcUrl(bridgeConfig.Ethereum.NodeUrl)
+	guardianSetList, err := guardiansets.GetGuardianSetsFromChain(rootCtx, ethRpcUrl, ethGovernanceAddress)
 	if err != nil {
 		logger.Fatal("failed to get guardian sets from chain", zap.Error(err))
 	}
@@ -174,7 +176,7 @@ func run(cmd *cobra.Command, args []string) {
 	guardianSets := guardiansets.NewGuardianSets(
 		guardianSetList,
 		bridgeConfig.Guardian.GuardianUrls[0],
-		bridgeConfig.Ethereum.NodeUrl,
+		ethRpcUrl,
 		logger,
 		time.Duration(*fetchGuardianSetDuration)*time.Second,
 		ethGovernanceAddress,
@@ -342,6 +344,13 @@ func discardMessages[T any](ctx context.Context, obsvReqC chan T) {
 			}
 		}
 	}()
+}
+
+func getEthRpcUrl(url string) string {
+	if strings.HasPrefix(url, "http") {
+		return url
+	}
+	return fmt.Sprintf("http://%s", url)
 }
 
 func main() {
