@@ -20,10 +20,12 @@ import (
 
 // TODO separate and maybe share between fly and web
 type Repository struct {
-	db          *mongo.Database
-	log         *zap.Logger
-	cache       *sequencesCache
-	collections struct {
+	db                *mongo.Database
+	log               *zap.Logger
+	governanceChain   vaa.ChainID
+	governanceEmitter vaa.Address
+	cache             *sequencesCache
+	collections       struct {
 		vaas         *mongo.Collection
 		missingVaas  *mongo.Collection
 		heartbeats   *mongo.Collection
@@ -33,9 +35,9 @@ type Repository struct {
 }
 
 // TODO wrap repository with a service that filters using redis
-func NewRepository(db *mongo.Database, log *zap.Logger) *Repository {
+func NewRepository(db *mongo.Database, log *zap.Logger, governanceChain vaa.ChainID, governanceEmitter vaa.Address) *Repository {
 	cache := newSequencesCache()
-	return &Repository{db, log, cache, struct {
+	return &Repository{db, log, governanceChain, governanceEmitter, cache, struct {
 		vaas         *mongo.Collection
 		missingVaas  *mongo.Collection
 		heartbeats   *mongo.Collection
@@ -102,12 +104,24 @@ func (s *Repository) upsertMissingIds(ctx context.Context, emitterId *emitterId,
 	return err
 }
 
-func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []byte) error {
-	emitterId := &emitterId{
-		emitterChain:   v.EmitterChain,
-		emitterAddress: v.EmitterAddress,
-		targetChain:    v.TargetChain,
+func (s *Repository) getEmitterId(v *vaa.VAA) *emitterId {
+	if v.EmitterChain == s.governanceChain && v.EmitterAddress == s.governanceEmitter {
+		return &emitterId{
+			emitterChain:        v.EmitterChain,
+			emitterAddress:      v.EmitterAddress,
+			isGovernanceEmitter: true,
+		}
 	}
+	return &emitterId{
+		emitterChain:        v.EmitterChain,
+		emitterAddress:      v.EmitterAddress,
+		targetChain:         v.TargetChain,
+		isGovernanceEmitter: false,
+	}
+}
+
+func (s *Repository) UpsertVaa(ctx context.Context, v *vaa.VAA, serializedVaa []byte) error {
+	emitterId := s.getEmitterId(v)
 	err := s.upsertMissingIds(ctx, emitterId, v.Sequence)
 	if err != nil {
 		return nil
@@ -240,20 +254,6 @@ func (s *Repository) removeMissingIds(ctx context.Context, emitterId *emitterId,
 	}
 	filter := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: vaaIds}}}}
 	_, err := s.collections.missingVaas.DeleteMany(ctx, filter)
-	return err
-}
-
-func (s *Repository) UpsertMissingVaa(ctx context.Context, vaaId string) error {
-	now := time.Now()
-	missingVaaDoc := MissingVaaUpdate{ID: vaaId}
-
-	update := bson.M{
-		"$set":         missingVaaDoc,
-		"$setOnInsert": indexedAt(now),
-	}
-
-	opts := options.Update().SetUpsert(true)
-	_, err := s.collections.missingVaas.UpdateByID(ctx, vaaId, update, opts)
 	return err
 }
 

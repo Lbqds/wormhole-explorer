@@ -154,7 +154,11 @@ func run(cmd *cobra.Command, args []string) {
 		logger.Fatal("error running migration", zap.Error(err))
 	}
 
-	repository := storage.NewRepository(db, logger)
+	governanceEmitter, err := vaa.StringToAddress(bridgeConfig.Guardian.GovernanceEmitterAddress)
+	if err != nil {
+		logger.Fatal("invalid governance emitter")
+	}
+	repository := storage.NewRepository(db, logger, vaa.ChainID(bridgeConfig.Guardian.GovernanceChainId), governanceEmitter)
 
 	// Outbound gossip message queue
 	sendC := make(chan []byte)

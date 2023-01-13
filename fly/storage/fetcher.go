@@ -22,16 +22,23 @@ func loadEmitterIds(config *common.BridgeConfig) ([]*emitterId, error) {
 	}
 	emitterIds := make([]*emitterId, 0)
 	for i := 0; i < len(chains); i++ {
+		emitterChain := chains[i]
+		emitterAddress, err := vaa.StringToAddress(emitterChain.TokenBridgeEmitterAddress)
+		if err != nil {
+			return nil, err
+		}
+		emitterIds = append(emitterIds, &emitterId{
+			emitterChain:        emitterChain.chainId,
+			emitterAddress:      emitterAddress,
+			targetChain:         vaa.ChainIDUnset,
+			isGovernanceEmitter: false,
+		})
+
 		for j := 0; j < len(chains); j++ {
 			if i == j {
 				continue
 			}
-			emitterChain := chains[i]
 			targetChain := chains[j]
-			emitterAddress, err := vaa.StringToAddress(emitterChain.TokenBridgeEmitterAddress)
-			if err != nil {
-				return nil, err
-			}
 			emitterIds = append(emitterIds, &emitterId{
 				emitterChain:        emitterChain.chainId,
 				emitterAddress:      emitterAddress,
