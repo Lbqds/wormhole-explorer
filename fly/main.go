@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"time"
 
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"github.com/alephium/wormhole-fork/explorer/fly/processor"
 	"github.com/alephium/wormhole-fork/explorer/fly/server"
 	"github.com/alephium/wormhole-fork/explorer/fly/storage"
+	"github.com/spf13/cobra"
 
 	"github.com/alephium/wormhole-fork/node/pkg/common"
 	"github.com/alephium/wormhole-fork/node/pkg/p2p"
@@ -75,18 +75,37 @@ func loadMongodbConfig(logger *zap.Logger) *mongodbConfig {
 	}
 }
 
-func main() {
-	// Node's main lifecycle context.
-	p2pNetworkId := flag.String("id", "/wormhole/dev", "P2P network id")
-	p2pPort := flag.Uint("port", 8999, "P2P UDP listener port")
-	p2pBootstrap := flag.String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
-	nodeKeyPath := flag.String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
-	network := flag.String("network", "devnet", "Network type(devnet, testnet, mainnet)")
-	logLevel := flag.String("logLevel", "debug", "Log level")
-	fetchMissingVaasDuration := flag.Uint("fetchMissingVaasDuration", 300, "Fetch missing vaas duration")
-	fetchVaaBatchSize := flag.Uint("fetchVaaBatchSize", 20, "Fetch vaa batch size")
-	fetchGuarduanSetDuration := flag.Uint("fetchGuardianSetDuration", 5, "Fetch guardian set duration")
+var rootCmd = &cobra.Command{
+	Use:   "explorer",
+	Short: "Wormhole explorer backend",
+	Run:   run,
+}
 
+var (
+	p2pNetworkId             *string
+	p2pPort                  *uint
+	p2pBootstrap             *string
+	nodeKeyPath              *string
+	network                  *string
+	logLevel                 *string
+	fetchMissingVaasDuration *uint
+	fetchVaaBatchSize        *uint
+	fetchGuardianSetDuration *uint
+)
+
+func init() {
+	p2pNetworkId = rootCmd.Flags().String("id", "/wormhole/dev", "P2P network id")
+	p2pPort = rootCmd.Flags().Uint("port", 8999, "P2P UDP listener port")
+	p2pBootstrap = rootCmd.Flags().String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
+	nodeKeyPath = rootCmd.Flags().String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
+	network = rootCmd.Flags().String("network", "devnet", "Network type(devnet, testnet, mainnet)")
+	logLevel = rootCmd.Flags().String("logLevel", "debug", "Log level")
+	fetchMissingVaasDuration = rootCmd.Flags().Uint("fetchMissingVaasDuration", 300, "Fetch missing vaas duration")
+	fetchVaaBatchSize = rootCmd.Flags().Uint("fetchVaaBatchSize", 20, "Fetch vaa batch size")
+	fetchGuardianSetDuration = rootCmd.Flags().Uint("fetchGuardianSetDuration", 5, "Fetch guardian set duration")
+}
+
+func run(cmd *cobra.Command, args []string) {
 	bridgeConfig, err := common.ReadConfigsByNetwork(*network)
 	if err != nil {
 		fmt.Printf("failed to read bridge config, error: %v\n", err)
@@ -157,7 +176,7 @@ func main() {
 		bridgeConfig.Guardian.GuardianUrls[0],
 		bridgeConfig.Ethereum.NodeUrl,
 		logger,
-		time.Duration(*fetchGuarduanSetDuration)*time.Second,
+		time.Duration(*fetchGuardianSetDuration)*time.Second,
 		ethGovernanceAddress,
 		guardianSetC,
 	)
@@ -323,4 +342,11 @@ func discardMessages[T any](ctx context.Context, obsvReqC chan T) {
 			}
 		}
 	}()
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
