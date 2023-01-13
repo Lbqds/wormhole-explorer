@@ -61,14 +61,33 @@ func Run(db *mongo.Database) error {
 		}
 	}
 
-	// create index in vaas collection by vaa key (emitterchain, emitterAddr, sequence)
-	indexVaaByKey := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "timestamp", Value: -1},
-			{Key: "emitterAddr", Value: 1},
-			{Key: "emitterChain", Value: 1},
-		}}
-	_, err = db.Collection("vaas").Indexes().CreateOne(context.TODO(), indexVaaByKey)
+	vaaIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "timestamp", Value: -1},
+				{Key: "emitterAddr", Value: 1},
+				{Key: "emitterChain", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "emitterChain", Value: 1},
+				{Key: "emitterAddr", Value: 1},
+				{Key: "targetChain", Value: 1},
+				{Key: "sequence", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "emitterChain", Value: 1},
+				{Key: "emitterAddr", Value: 1},
+				{Key: "sequence", Value: 1},
+			},
+		},
+	}
+
+	// create indexex in vaas collection
+	_, err = db.Collection("vaas").Indexes().CreateMany(context.TODO(), vaaIndexes)
 	if err != nil {
 		target := &mongo.CommandError{}
 		isCommandError := errors.As(err, target)
@@ -77,39 +96,22 @@ func Run(db *mongo.Database) error {
 		}
 	}
 
-	indexVaaByTimestamp := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "emitterChain", Value: 1},
-			{Key: "emitterAddr", Value: 1},
-			{Key: "sequence", Value: 1},
-		}}
-	_, err = db.Collection("vaas").Indexes().CreateOne(context.TODO(), indexVaaByTimestamp)
-	if err != nil {
-		target := &mongo.CommandError{}
-		isCommandError := errors.As(err, target)
-		if !isCommandError || err.(mongo.CommandError).Code != 48 {
-			return err
-		}
+	observationIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "indexedAt", Value: 1}},
+		},
+		{
+			Keys: bson.D{
+				{Key: "emitterChain", Value: 1},
+				{Key: "emitterAddr", Value: 1},
+				{Key: "targetChain", Value: 1},
+				{Key: "sequence", Value: 1},
+			},
+		},
 	}
 
-	// create index in observations collection by indexedAt.
-	indexObservationsByIndexedAt := mongo.IndexModel{Keys: bson.D{{Key: "indexedAt", Value: 1}}}
-	_, err = db.Collection("observations").Indexes().CreateOne(context.TODO(), indexObservationsByIndexedAt)
-	if err != nil {
-		target := &mongo.CommandError{}
-		isCommandError := errors.As(err, target)
-		if !isCommandError || err.(mongo.CommandError).Code != 48 {
-			return err
-		}
-	}
-
-	// create index in observations collect.
-	indexObservationsByEmitterChainAndAddressAndSequence := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "emitterChain", Value: 1},
-			{Key: "emitterAddr", Value: 1},
-			{Key: "sequence", Value: 1}}}
-	_, err = db.Collection("observations").Indexes().CreateOne(context.TODO(), indexObservationsByEmitterChainAndAddressAndSequence)
+	// create indexex in observations collection
+	_, err = db.Collection("observations").Indexes().CreateMany(context.TODO(), observationIndexes)
 	if err != nil {
 		target := &mongo.CommandError{}
 		isCommandError := errors.As(err, target)
